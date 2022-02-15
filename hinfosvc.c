@@ -11,12 +11,12 @@ unsigned long long runCommand(char *cmd, char *output) {
     FILE *file = NULL;
     file = popen(cmd, "r");
     if(!file){
-        perror("Popen function call fail\n");
+        perror("Popen function call fail ");
         exit(EXIT_FAILURE);
     }
     fgets(output, BUFFSIZE, file);
     if(pclose(file) != 0) {
-        perror("Pclose function call fail\n");
+        perror("Pclose function call fail ");
         exit(EXIT_FAILURE);
     }
     return atoll(output);
@@ -52,8 +52,34 @@ double getCPUUsage() {
     return ((totald - idled) / totald)*100;
 }
 
-int main(int argc, const char * argv[]) {
+void makeResponse(char *buff, char *response) {
+    char header[] = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;\r\n\r\n";
     char output[BUFFSIZE];
+    char *method = strtok(buff, " ");
+    char *dest = strtok(NULL, " ");
+
+    if ((strcmp(method, "GET")) == 0) {
+        if((strcmp(dest, "/hostname")) == 0) {
+            strcat(response, header);
+            runCommand("cat /proc/sys/kernel/hostname", output);
+            strcat(response, output);
+        } else if ((strcmp(dest, "/cpu-name")) == 0) {
+            strcat(response, header);
+            runCommand("cat /proc/cpuinfo | grep \"model name\" | uniq | awk  -F \":\" '{print $2}' | sed 's/ //'", output);
+            strcat(response, output);
+        } else if ((strcmp(dest, "/load")) == 0) {
+            strcat(response, header);
+            sprintf(output, "%.2f%%", getCPUUsage());
+            strcat(response, output);
+        } else {
+            strcat(response, "HTTP/1.1 400 BAD REQUEST\r\n\r\n");
+        }
+    } else {
+
+    }
+}
+
+int main(int argc, const char *argv[]) {
     int server_socket, optval, rc;
     if(argc != 2) {
         fprintf(stderr, "Wrong parametr\n");
@@ -63,19 +89,17 @@ int main(int argc, const char * argv[]) {
     // TODO check if correct port number
 
     if((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
-        perror("Socket function call fail\n");
+        perror("Socket function call fail ");
         exit(EXIT_FAILURE);
     }
-    printf("CPU USAGE: %f%%\n", getCPUUsage());
-    return 0;
 
     optval = 1;
     if(setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int))  == -1) {
-        perror("Setsockopt function call fail\n");
+        perror("Setsockopt function call fail ");
         exit(EXIT_FAILURE);
     }
     if(setsockopt(server_socket, SOL_SOCKET, SO_REUSEPORT, (const void*)&optval, sizeof(int))  == -1) {
-        perror("Setsockopt function call fail\n");
+        perror("Setsockopt function call fail ");
         exit(EXIT_FAILURE);
     }
 
@@ -83,29 +107,33 @@ int main(int argc, const char * argv[]) {
     bzero((char *) &serverAddress, sizeof(serverAddress));
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
-    printf("%d\n", portNumber);
     serverAddress.sin_port = htons((unsigned short)portNumber);
 
     if((rc = bind(server_socket, (struct sockaddr *) &serverAddress, sizeof(serverAddress))) < 0) {
-        perror("Bind function call fail\n");
+        perror("Bind function call fail ");
         exit(EXIT_FAILURE);
     }
 
-    if((listen(server_socket, 1)) == - 1) {
-        perror("Listen function call fail\n");
+    if((listen(server_socket, 10)) == - 1) {
+        perror("Listen function call fail ");
         exit(EXIT_FAILURE);
     }
 
+    char response[1024] = "";
     while(1) {
         int comm_socket = accept(server_socket, NULL, NULL);
-        printf("cus\n");
+        if(comm_socket > 0) {
+            char buff[1024];
+            int res = 0;
+            res = recv(comm_socket, buff, 1024, 0);
+                if (res <= 0)
+                break;
+            makeResponse(buff, response);
+            printf("%s", response);
+            send(comm_socket, response, strlen(response), 0);
+        }
+        memset(response, 0, strlen(response));
         close(comm_socket);
     }
-
-    runCommand("cat /proc/sys/kernel/hostname", output);
-    printf("Hostname: %s", output);
-    runCommand("cat /proc/cpuinfo | grep \"model name\" | uniq | awk  -F \":\" '{print $2}' | sed 's/ //'", output);
-    printf("CPU name: %s", output);
-
     return 0;
 }
