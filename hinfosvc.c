@@ -69,7 +69,7 @@ void makeResponse(char *buff, char *response) {
             strcat(response, output);
         } else if ((strcmp(dest, "/load")) == 0) {
             strcat(response, header);
-            sprintf(output, "%.2f%%", getCPUUsage());
+            sprintf(output, "%.2f%%\r\n", getCPUUsage());
             strcat(response, output);
         } else {
             strcat(response, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
