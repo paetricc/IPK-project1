@@ -5,7 +5,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFFSIZE 512
+#define BUFFSIZE 1024
+#define BETWEEN(first, number, last)  (((first) >= (number)) && ((number) <= (last)))
 
 unsigned long long runCommand(char *cmd, char *output) {
     FILE *file = NULL;
@@ -25,31 +26,30 @@ unsigned long long runCommand(char *cmd, char *output) {
 unsigned long long getCPUData(unsigned long long *Idle) {
     char tmp[BUFFSIZE];
     long long user, nice, system, idle, iowait, irq, softirq, steal;
-    user = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $2}'", tmp);
-    nice = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $3}'", tmp);
-    system = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $4}'", tmp);
-    idle = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $5}'", tmp);
-    iowait = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $6}'", tmp);
-    irq = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $7}'", tmp);
+    user    = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $2}'", tmp);
+    nice    = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $3}'", tmp);
+    system  = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $4}'", tmp);
+    idle    = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $5}'", tmp);
+    iowait  = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $6}'", tmp);
+    irq     = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $7}'", tmp);
     softirq = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $8}'", tmp);
-    steal = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $9}'", tmp);
+    steal   = runCommand("cat /proc/stat | grep -w 'cpu' | awk -F \" \" '{print $9}'", tmp);
 
-    *(Idle) = idle + iowait;
+    *Idle = idle + iowait;
 
     return ((*Idle) + (user + nice + system + irq + softirq + steal));
 }
 
 double getCPUUsage() {
-    unsigned long long prevIdle, idle, prevTotal, Total;
-    double totald, idled;
+    unsigned long long prevIdle, idle, prevTotal, Total, totald, idled;
     prevTotal = getCPUData(&prevIdle);
-    sleep(1);
+    usleep(100000);
     Total = getCPUData(&idle);
 
     totald = Total - prevTotal;
     idled = idle - prevIdle; 
 
-    return ((totald - idled) / totald)*100;
+    return ((totald - idled) / (double)totald)*100;
 }
 
 void makeResponse(char *buff, char *response) {
@@ -72,33 +72,38 @@ void makeResponse(char *buff, char *response) {
             sprintf(output, "%.2f%%", getCPUUsage());
             strcat(response, output);
         } else {
-            strcat(response, "HTTP/1.1 400 BAD REQUEST\r\n\r\n");
+            strcat(response, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
         }
     } else {
-
+        strcat(response, "HTTP/1.1 400 BAD REQUEST\r\n\r\n");
     }
+    method = response = NULL;
 }
 
 int main(int argc, const char *argv[]) {
-    int server_socket, optval, rc;
+    int sockfd, optval, rc;
     if(argc != 2) {
-        fprintf(stderr, "Wrong parametr\n");
+        fprintf(stderr, "Wrong number of parameters (count:%d)\n", argc-1);
         exit(EXIT_FAILURE);
     }
     int portNumber = atoi(argv[1]);
-    // TODO check if correct port number
+    
+    if(BETWEEN(0, portNumber, 65535)) {
+        fprintf(stderr, "The port number: %d is in the wrong range\n", portNumber);
+        exit(EXIT_FAILURE);
+    }
 
-    if((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
         perror("Socket function call fail ");
         exit(EXIT_FAILURE);
     }
 
     optval = 1;
-    if(setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int))  == -1) {
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int))  == -1) {
         perror("Setsockopt function call fail ");
         exit(EXIT_FAILURE);
     }
-    if(setsockopt(server_socket, SOL_SOCKET, SO_REUSEPORT, (const void*)&optval, sizeof(int))  == -1) {
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (const void*)&optval, sizeof(int))  == -1) {
         perror("Setsockopt function call fail ");
         exit(EXIT_FAILURE);
     }
@@ -109,31 +114,31 @@ int main(int argc, const char *argv[]) {
     serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     serverAddress.sin_port = htons((unsigned short)portNumber);
 
-    if((rc = bind(server_socket, (struct sockaddr *) &serverAddress, sizeof(serverAddress))) < 0) {
+    if((rc = bind(sockfd, (const struct sockaddr *) &serverAddress, sizeof(serverAddress))) == -1) {
         perror("Bind function call fail ");
         exit(EXIT_FAILURE);
     }
 
-    if((listen(server_socket, 10)) == - 1) {
+    if((listen(sockfd, 10)) == - 1) {
         perror("Listen function call fail ");
         exit(EXIT_FAILURE);
     }
 
-    char response[1024] = "";
+    char response[BUFFSIZE] = "";
     while(1) {
-        int comm_socket = accept(server_socket, NULL, NULL);
-        if(comm_socket > 0) {
-            char buff[1024];
+        int commSocket = accept(sockfd, NULL, NULL);
+        if(commSocket > 0) {
+            char buff[BUFFSIZE];
             int res = 0;
-            res = recv(comm_socket, buff, 1024, 0);
+            res = recv(commSocket, buff, BUFFSIZE, 0);
                 if (res <= 0)
                 break;
             makeResponse(buff, response);
-            printf("%s", response);
-            send(comm_socket, response, strlen(response), 0);
+            send(commSocket, response, strlen(response), 0);
+            fflush(stdout);
         }
         memset(response, 0, strlen(response));
-        close(comm_socket);
+        close(commSocket);
     }
     return 0;
 }
