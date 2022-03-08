@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 #define BUFFSIZE 1024
-#define BETWEEN(first, number, last)  (((first) >= (number)) && ((number) <= (last)))
+#define BETWEEN(first, number, last)  (((first) <= (number)) && ((number) <= (last)))
 
 unsigned long long runCommand(char *cmd, char *output) {
     FILE *file = NULL;
@@ -40,7 +40,7 @@ unsigned long long getCPUData(unsigned long long *Idle) {
     return ((*Idle) + (user + nice + system + irq + softirq + steal));
 }
 
-double getCPUUsage() {
+int getCPUUsage() {
     unsigned long long prevIdle, idle, prevTotal, Total, totald, idled;
     prevTotal = getCPUData(&prevIdle);
     usleep(100000);
@@ -69,7 +69,7 @@ void makeResponse(char *buff, char *response) {
             strcat(response, output);
         } else if ((strcmp(dest, "/load")) == 0) {
             strcat(response, header);
-            sprintf(output, "%.2f%%\r\n", getCPUUsage());
+            sprintf(output, "%d%%\r\n", getCPUUsage());
             strcat(response, output);
         } else {
             strcat(response, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
@@ -86,10 +86,16 @@ int main(int argc, const char *argv[]) {
         fprintf(stderr, "Wrong number of parameters (count:%d)\n", argc-1);
         exit(EXIT_FAILURE);
     }
-    int portNumber = atoi(argv[1]);
+
+    char *ptr;
+    long portNumber = strtol(argv[1], &ptr, 10);
+    if(strlen(ptr) != 0) {
+        fprintf(stderr, "Wrong parameter: %s\n", argv[1]);
+        exit(EXIT_FAILURE);
+    }
     
-    if(BETWEEN(0, portNumber, 65535)) {
-        fprintf(stderr, "The port number: %d is in the wrong range\n", portNumber);
+    if(!(BETWEEN(0, portNumber, 65535))) {
+        fprintf(stderr, "The port number: %ld is in the wrong range\n", portNumber);
         exit(EXIT_FAILURE);
     }
 
