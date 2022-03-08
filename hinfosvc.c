@@ -1,3 +1,11 @@
+/**
+ * 
+ * IPK - projekt 1
+ * 
+ * Tomáš Bártů (xbartu11)
+ * 
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -8,6 +16,13 @@
 #define BUFFSIZE 1024
 #define BETWEEN(first, number, last)  (((first) <= (number)) && ((number) <= (last)))
 
+/**
+ * @brief Funkce spustí příkaz a výstup uloží do pole a vraci jeko číselnou hodnotu, kterou není potřeba využít 
+ * 
+ * @param cmd Příkaz, který se má vykonat
+ * @param output Pole do kterého bude uložen výstup
+ * @return unsigned long long Nulu pokud je výstupem příkazu string jinak jeho číselnou hodnotu
+ */
 unsigned long long runCommand(char *cmd, char *output) {
     FILE *file = NULL;
     file = popen(cmd, "r");
@@ -23,6 +38,12 @@ unsigned long long runCommand(char *cmd, char *output) {
     return atoll(output);
 }
 
+/**
+ * @brief Funkce si zjistí potřebná data zatížení a provede nad nimi sumu
+ * 
+ * @param Idle Ukazetel na hodnotu, do kterě se uloží hodnota kdy procesor nic nedělá
+ * @return unsigned long long Hodnotu aktualnícho zatížení
+ */
 unsigned long long getCPUData(unsigned long long *Idle) {
     char tmp[BUFFSIZE];
     long long user, nice, system, idle, iowait, irq, softirq, steal;
@@ -40,6 +61,12 @@ unsigned long long getCPUData(unsigned long long *Idle) {
     return ((*Idle) + (user + nice + system + irq + softirq + steal));
 }
 
+/**
+ * @brief Funkci zjišťujíci zatížení procesoru v procentech na základě dvou měření procesoru 
+ *  mezi, kterými je prodleva 100ms.
+ * 
+ * @return int Celkové zatížení procesoru
+ */
 int getCPUUsage() {
     unsigned long long prevIdle, idle, prevTotal, Total, totald, idled;
     prevTotal = getCPUData(&prevIdle);
@@ -52,6 +79,12 @@ int getCPUUsage() {
     return ((totald - idled) / (double)totald)*100;
 }
 
+/**
+ * @brief Funkce vytváří odpověď pro klienta na základě jeho požadavku
+ * 
+ * @param buff Data přijatá od klienta
+ * @param response Prazdne pole do kterého po postupně bude vkládat odpověď, která se pošle
+ */
 void makeResponse(char *buff, char *response) {
     char header[] = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;\r\n\r\n";
     char output[BUFFSIZE];
