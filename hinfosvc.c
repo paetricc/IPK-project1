@@ -86,8 +86,8 @@ int getCPUUsage() {
  * @param response Prazdne pole do kterého po postupně bude vkládat odpověď, která se pošle
  */
 void makeResponse(char *buff, char *response) {
-    char header[] = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;\r\n\r\n";
-    char output[BUFFSIZE];
+    char header[] = "HTTP/1.1 200 OK\r\nContent-Type: text/plain;\r\n";
+    char output[BUFFSIZE], tmp[BUFFSIZE];
     char *method = strtok(buff, " ");
     char *dest = strtok(NULL, " ");
 
@@ -95,21 +95,22 @@ void makeResponse(char *buff, char *response) {
         if((strcmp(dest, "/hostname")) == 0) {
             strcat(response, header);
             runCommand("cat /proc/sys/kernel/hostname", output);
-            strcat(response, output);
         } else if ((strcmp(dest, "/cpu-name")) == 0) {
             strcat(response, header);
             runCommand("cat /proc/cpuinfo | grep \"model name\" | uniq | awk  -F \":\" '{print $2}' | sed 's/ //'", output);
-            strcat(response, output);
         } else if ((strcmp(dest, "/load")) == 0) {
             strcat(response, header);
             sprintf(output, "%d%%\r\n", getCPUUsage());
-            strcat(response, output);
         } else {
-            strcat(response, "HTTP/1.1 404 NOT FOUND\r\n\r\n");
+            strcat(response, "HTTP/1.1 404 NOT FOUND\r\n");
         }
     } else {
-        strcat(response, "HTTP/1.1 400 BAD REQUEST\r\n\r\n");
+        strcat(response, "HTTP/1.1 400 BAD REQUEST\r\n");
     }
+    sprintf(tmp, "Content-Length: %ld\r\n", strlen(output));
+    strcat(response, tmp);
+    strcat(response, "Connection: Closed\r\n\r\n");
+    strcat(response, output);
     method = response = NULL;
 }
 
